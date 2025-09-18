@@ -23,8 +23,10 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
-  String? _currentUrl;
-  String? _pageTitle;
+  double _zoomScale = 1.0; // viewport scale, mimics Ctrl +/-
+  static const double _zoomStep = 0.1; // 10% steps
+  static const double _minZoom = 0.5;
+  static const double _maxZoom = 3.0;
 
   @override
   void initState() {
@@ -43,25 +45,15 @@ class _WebViewScreenState extends State<WebViewScreen> {
           onPageStarted: (String url) {
             setState(() {
               _isLoading = true;
-              _currentUrl = url;
             });
           },
           onPageFinished: (String url) {
             setState(() {
               _isLoading = false;
-              _currentUrl = url;
             });
-            // Apply 70% zoom after page is fully loaded
-            final js = WebViewZoom.buildZoomScript(0.7);
+            // Apply current zoom after page is fully loaded
+            final js = WebViewZoom.buildZoomScript(_zoomScale);
             _controller.runJavaScript(js);
-            // Get page title
-            _controller.getTitle().then((title) {
-              if (mounted) {
-                setState(() {
-                  _pageTitle = title;
-                });
-              }
-            });
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.description}');
@@ -77,6 +69,23 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   void _reload() {
     _controller.reload();
+  }
+
+  void _applyZoom(double newScale) {
+    final clamped = newScale.clamp(_minZoom, _maxZoom);
+    setState(() {
+      _zoomScale = clamped;
+    });
+    final js = WebViewZoom.buildZoomScript(_zoomScale);
+    _controller.runJavaScript(js);
+  }
+
+  void _zoomIn() {
+    _applyZoom(_zoomScale + _zoomStep);
+  }
+
+  void _zoomOut() {
+    _applyZoom(_zoomScale - _zoomStep);
   }
 
   void _goBack() {
@@ -127,6 +136,18 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 tooltip: 'Go Back',
               );
             },
+          ),
+          // Zoom out button
+          IconButton(
+            icon: const Icon(Icons.zoom_out),
+            onPressed: _zoomScale > _minZoom ? _zoomOut : null,
+            tooltip: 'Zoom Out',
+          ),
+          // Zoom in button
+          IconButton(
+            icon: const Icon(Icons.zoom_in),
+            onPressed: _zoomScale < _maxZoom ? _zoomIn : null,
+            tooltip: 'Zoom In',
           ),
           // Forward button
           FutureBuilder<bool>(

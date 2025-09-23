@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'utils/webview_zoom.dart';
@@ -23,15 +24,24 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _hasError = false;
+  Timer? _timeoutTimer;
   double _zoomScale = 1.0; // viewport scale, mimics Ctrl +/-
   static const double _zoomStep = 0.1; // 10% steps
   static const double _minZoom = 0.5;
   static const double _maxZoom = 3.0;
+  static const Duration _timeoutDuration = Duration(seconds: 5);
 
   @override
   void initState() {
     super.initState();
     _initializeWebView();
+  }
+
+  @override
+  void dispose() {
+    _timeoutTimer?.cancel();
+    super.dispose();
   }
 
   void _initializeWebView() {
@@ -45,18 +55,62 @@ class _WebViewScreenState extends State<WebViewScreen> {
           onPageStarted: (String url) {
             setState(() {
               _isLoading = true;
+              _hasError = false;
+            });
+            // Start timeout timer
+            _timeoutTimer?.cancel();
+            _timeoutTimer = Timer(_timeoutDuration, () {
+              if (mounted && _isLoading) {
+                setState(() {
+                  _isLoading = false;
+                  _hasError = true;
+                });
+              }
             });
           },
           onPageFinished: (String url) {
+            debugPrint('Page finished loading: $url');
+            _timeoutTimer?.cancel();
+            
+            // Don't reset error state if we already have an error
+            if (_hasError) {
+              debugPrint('Error already detected, not resetting state');
+              return;
+            }
+            
+            // Check if we're on an error page immediately
+            if (url.startsWith('chrome-error://') || url.startsWith('data:text/html')) {
+              debugPrint('Detected error page URL: $url');
+              setState(() {
+                _isLoading = false;
+                _hasError = true;
+              });
+              return;
+            }
+            
             setState(() {
               _isLoading = false;
+              _hasError = false;
             });
             // Apply current zoom after page is fully loaded
             final js = WebViewZoom.buildZoomScript(_zoomScale);
             _controller.runJavaScript(js);
+            
+            // Check if the page contains error indicators
+            _checkForErrorPage();
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.description}');
+            debugPrint('Error code: ${error.errorCode}');
+            debugPrint('Error type: ${error.errorType}');
+            _timeoutTimer?.cancel();
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _hasError = true;
+              });
+              debugPrint('Error state set to true');
+            }
           },
           onNavigationRequest: (NavigationRequest request) {
             // Allow all navigation requests
@@ -65,10 +119,94 @@ class _WebViewScreenState extends State<WebViewScreen> {
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
+    
+    // Add a fallback check after a short delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted && _isLoading) {
+        debugPrint('Fallback check: Still loading after 2 seconds');
+        _controller.runJavaScriptReturningResult('window.location.href').then((url) {
+          debugPrint('Current URL: $url');
+          final urlString = url.toString();
+          if (urlString.startsWith('chrome-error://') || urlString.startsWith('data:text/html')) {
+            debugPrint('Fallback detected error page');
+            setState(() {
+              _isLoading = false;
+              _hasError = true;
+            });
+          }
+        }).catchError((error) {
+          debugPrint('Error getting URL: $error');
+        });
+      }
+    });
   }
 
   void _reload() {
+    _timeoutTimer?.cancel();
+    setState(() {
+      _hasError = false;
+      _isLoading = true;
+    });
     _controller.reload();
+  }
+
+  void _checkForErrorPage() {
+    // JavaScript to check for common error page indicators and set a flag
+    const errorCheckScript = '''
+      (function() {
+        var bodyText = document.body.innerText.toLowerCase();
+        var title = document.title.toLowerCase();
+        var url = window.location.href;
+        
+        // Check if we're on a chrome error page
+        if (url.startsWith('chrome-error://') || url.startsWith('data:text/html')) {
+          window.flutterErrorDetected = true;
+          return;
+        }
+        
+        // Check for common error indicators
+        var errorIndicators = [
+          'web page not available',
+          'this site can\'t be reached',
+          'err_name_not_resolved',
+          'err_connection_refused',
+          'err_timed_out',
+          'dns_probe_finished_nxdomain',
+          'this webpage is not available',
+          'server not found',
+          'connection timed out',
+          'net::err_name_not_resolved',
+          'net::err_connection_refused',
+          'net::err_timed_out'
+        ];
+        
+        for (var i = 0; i < errorIndicators.length; i++) {
+          if (bodyText.includes(errorIndicators[i]) || title.includes(errorIndicators[i])) {
+            window.flutterErrorDetected = true;
+            return;
+          }
+        }
+        
+        window.flutterErrorDetected = false;
+      })();
+    ''';
+    
+    _controller.runJavaScript(errorCheckScript);
+    
+    // Check the flag after a short delay
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _controller.runJavaScriptReturningResult('window.flutterErrorDetected').then((result) {
+        debugPrint('Error check result: $result');
+        if (result == 'true' && mounted) {
+          debugPrint('Setting error state to true from JavaScript check');
+          setState(() {
+            _hasError = true;
+          });
+        }
+      }).catchError((error) {
+        debugPrint('Error checking for error page: $error');
+      });
+    });
   }
 
   void _applyZoom(double newScale) {
@@ -106,6 +244,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('Build called - _hasError: $_hasError, _isLoading: $_isLoading');
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -163,7 +302,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
           ),
         ],
       ),
-      body: Stack(
+      body: _hasError ? _buildMaintenanceView() : Stack(
         children: [
           // Web view
           WebViewWidget(controller: _controller),
@@ -227,6 +366,78 @@ class _WebViewScreenState extends State<WebViewScreen> {
       //         ),
       //       )
       //     : null,
+    );
+  }
+
+  Widget _buildMaintenanceView() {
+    return Container(
+      color: Colors.white,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Maintenance icon
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C5F5F).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.build,
+                  size: 64,
+                  color: Color(0xFF2C5F5F),
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              // Title
+              const Text(
+                'App Under Maintenance',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2C5F5F),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              
+              // Description
+              const Text(
+                'We are currently performing maintenance on our services. Please try again later.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              
+              // Retry button
+              ElevatedButton.icon(
+                onPressed: _reload,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2C5F5F),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class EmployeeIdScreen extends StatefulWidget {
   final List<String> scannedCodes;
   final String scannerType;
+  final VoidCallback onStartOver;
 
   const EmployeeIdScreen({
     super.key,
     required this.scannedCodes,
     required this.scannerType,
+    required this.onStartOver,
   });
 
   @override
@@ -22,6 +25,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   final TextEditingController _employeeIdController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -166,6 +170,37 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                     ),
                   ),
                 ),
+                // const SizedBox(height: 12),
+                // // Save to local storage (shared preferences)
+                // SizedBox(
+                //   height: 56,
+                //   child: ElevatedButton.icon(
+                //     onPressed: _isSaving ? null : () async {
+                //       setState(() { _isSaving = true; });
+                //       try {
+                //         await _saveAssignmentToLocal();
+                //         if (!mounted) return;
+                //         ScaffoldMessenger.of(context).showSnackBar(
+                //           const SnackBar(
+                //             content: Text('Saved to device (local storage)'),
+                //             backgroundColor: Color(0xFF2C5F5F),
+                //           ),
+                //         );
+                //       } finally {
+                //         if (mounted) setState(() { _isSaving = false; });
+                //       }
+                //     },
+                //     icon: _isSaving
+                //       ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+                //       : const Icon(Icons.save_alt),
+                //     label: Text(_isSaving ? 'Saving...' : 'Save'),
+                //     style: ElevatedButton.styleFrom(
+                //       backgroundColor: Colors.green,
+                //       foregroundColor: Colors.white,
+                //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                //     ),
+                //   ),
+                // ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 56,
@@ -203,6 +238,21 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
     final docs = await getApplicationDocumentsDirectory();
     final target = File('${docs.path}/${tempFile.uri.pathSegments.last}');
     return tempFile.copy(target.path);
+  }
+
+  // Persist assignment locally using shared_preferences
+  Future<void> _saveAssignmentToLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'assignment:${_employeeIdController.text.trim()}';
+    // Store as a JSON string list
+    await prefs.setStringList(key, widget.scannedCodes);
+
+    // Maintain an index of saved employee IDs for listing later
+    final existing = prefs.getStringList('assignment:index') ?? <String>[];
+    if (!existing.contains(key)) {
+      existing.add(key);
+      await prefs.setStringList('assignment:index', existing);
+    }
   }
 
   void _showAssignmentDetails() {
@@ -543,18 +593,19 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
               ),
               const SizedBox(height: 12),
               
-              // Start Over Button
+              // Exit Button
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    // Go back to the first route (WebViewScreen is at the base of the stack)
+                    // Clear lists at source and return to start
+                    widget.onStartOver();
                     Navigator.of(context).popUntil((route) => route.isFirst);
                   },
                   icon: const Icon(Icons.restart_alt),
                   label: const Text(
-                    'Start Over',
+                    'Exit',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                     ),

@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'utils/webview_zoom.dart';
 import 'simple_scanner_screen.dart';
 import 'employee_id_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// A web view screen that displays the KFUPM Archibus login page
 class WebViewScreen extends StatefulWidget {
@@ -347,7 +348,39 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
                 const SizedBox(height: 16),
                 
-                // Removed scanned codes visibility and summary button
+                // Saved Employee Assets button (only if any saved)
+                FutureBuilder<bool>(
+                  future: _hasSavedAssignments(),
+                  builder: (context, snapshot) {
+                    final hasSaved = snapshot.data == true;
+                    if (!hasSaved) return const SizedBox.shrink();
+                    return SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showSavedAssignments();
+                        },
+                        icon: const Icon(Icons.folder_shared, size: 20),
+                        label: const Text(
+                          'Saved Employee Assets',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF2C5F5F),
+                          side: const BorderSide(color: Color(0xFF2C5F5F)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 16),
                 
                 // // Next button - for both Employee and Store codes
@@ -412,6 +445,12 @@ class _WebViewScreenState extends State<WebViewScreen> {
               ),
             );
           },
+          onStartOver: () {
+            setState(() {
+              _employeeScannedCodes = [];
+              _storeScannedCodes = [];
+            });
+          },
         ),
       ),
     );
@@ -441,6 +480,12 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
               ),
             );
+          },
+          onStartOver: () {
+            setState(() {
+              _employeeScannedCodes = [];
+              _storeScannedCodes = [];
+            });
           },
         ),
       ),
@@ -504,6 +549,12 @@ class _WebViewScreenState extends State<WebViewScreen> {
         builder: (context) => EmployeeIdScreen(
           scannedCodes: _employeeScannedCodes,
           scannerType: 'Assign to Employees',
+          onStartOver: () {
+            setState(() {
+              _employeeScannedCodes = [];
+              _storeScannedCodes = [];
+            });
+          },
         ),
       ),
     );
@@ -542,6 +593,112 @@ class _WebViewScreenState extends State<WebViewScreen> {
         );
       },
     );
+  }
+
+  Future<void> _showSavedAssignments() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getStringList('assignment:index') ?? <String>[];
+    final entries = <Map<String, dynamic>>[];
+    for (final key in keys) {
+      final codes = prefs.getStringList(key) ?? <String>[];
+      final id = key.replaceFirst('assignment:', '');
+      entries.add({'id': id, 'codes': codes});
+    }
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Saved Employee Assets',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C5F5F),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (entries.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'No saved assignments yet',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 400,
+                    child: ListView.builder(
+                      itemCount: entries.length,
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        final id = entry['id'] as String;
+                        final codes = entry['codes'] as List<String>;
+                        return ExpansionTile(
+                          leading: const Icon(Icons.person, color: Color(0xFF2C5F5F)),
+                          title: Text(
+                            id,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text('${codes.length} item(s)'),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Column(
+                                children: codes.map((c) => ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.qr_code, size: 18, color: Color(0xFF2C5F5F)),
+                                  title: Text(
+                                    c,
+                                    style: const TextStyle(fontFamily: 'monospace'),
+                                  ),
+                                )).toList(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _hasSavedAssignments() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getStringList('assignment:index') ?? <String>[];
+    return keys.isNotEmpty;
   }
 
   void _showAllScannedCodes() {

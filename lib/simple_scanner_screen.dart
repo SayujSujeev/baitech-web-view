@@ -6,12 +6,14 @@ class SimpleScannerScreen extends StatefulWidget {
   final String scannerType;
   final List<String> scannedCodes;
   final Function(String) onCodeScanned;
+  final VoidCallback onStartOver;
 
   const SimpleScannerScreen({
     super.key,
     required this.scannerType,
     required this.scannedCodes,
     required this.onCodeScanned,
+    required this.onStartOver,
   });
 
   @override
@@ -171,6 +173,7 @@ class _SimpleScannerScreenState extends State<SimpleScannerScreen> {
         builder: (context) => EmployeeIdScreen(
           scannedCodes: widget.scannedCodes,
           scannerType: widget.scannerType,
+          onStartOver: widget.onStartOver,
         ),
       ),
     );

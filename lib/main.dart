@@ -26,9 +26,9 @@ class MyApp extends StatelessWidget {
       ),
       home: const SplashScreen(
         nextScreen: WebViewScreen(
-          // url: 'https://fms.kfupm.edu.sa/archibus/login.axvw',
+          url: 'https://fms.kfupm.edu.sa/archibus/login.axvw',
           // url: 'https://shras.office.asc-ro.com/archibus/login.axvw',
-          url: 'https://google.com',
+          // url: 'https://google.com',
           title: 'KFUPM Archibus',
         ),
       ),

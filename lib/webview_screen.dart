@@ -280,7 +280,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 
                 // Title
                 const Text(
-                  'Scanner Options',
+                  'Assets Scanning Options',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -289,7 +289,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
                 const SizedBox(height: 30),
                 
-                // Assign to Employees button
+                // Assign to Employees button (no counts shown)
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -298,39 +298,10 @@ class _WebViewScreenState extends State<WebViewScreen> {
                       Navigator.pop(context);
                       _handleAssignToEmployees();
                     },
-                    icon: Stack(
-                      children: [
-                        const Icon(Icons.people, size: 24),
-                        if (_employeeScannedCodes.isNotEmpty)
-                          Positioned(
-                            right: -2,
-                            top: -2,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 16,
-                                minHeight: 16,
-                              ),
-                              child: Text(
-                                '${_employeeScannedCodes.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    label: Text(
-                      'Assign to Employees${_employeeScannedCodes.isNotEmpty ? ' (${_employeeScannedCodes.length})' : ''}',
-                      style: const TextStyle(
+                    icon: const Icon(Icons.people, size: 24),
+                    label: const Text(
+                      'Assign to Employees',
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -347,7 +318,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
                 const SizedBox(height: 16),
                 
-                // Check In to Store button
+                // Check In to Store button (no counts shown)
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -356,39 +327,10 @@ class _WebViewScreenState extends State<WebViewScreen> {
                       Navigator.pop(context);
                       _handleCheckInToStore();
                     },
-                    icon: Stack(
-                      children: [
-                        const Icon(Icons.store, size: 24),
-                        if (_storeScannedCodes.isNotEmpty)
-                          Positioned(
-                            right: -2,
-                            top: -2,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 16,
-                                minHeight: 16,
-                              ),
-                              child: Text(
-                                '${_storeScannedCodes.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    label: Text(
-                      'Check In to Store${_storeScannedCodes.isNotEmpty ? ' (${_storeScannedCodes.length})' : ''}',
-                      style: const TextStyle(
+                    icon: const Icon(Icons.store, size: 24),
+                    label: const Text(
+                      'Check In to Store',
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -405,63 +347,37 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
                 const SizedBox(height: 16),
                 
-                // View All Scanned Codes button
-                if (_employeeScannedCodes.isNotEmpty || _storeScannedCodes.isNotEmpty)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showAllScannedCodes();
-                      },
-                      icon: const Icon(Icons.list_alt, size: 20),
-                      label: Text(
-                        'View All Scanned Codes (${_employeeScannedCodes.length + _storeScannedCodes.length})',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF2C5F5F),
-                        side: const BorderSide(color: Color(0xFF2C5F5F)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
+                // Removed scanned codes visibility and summary button
                 const SizedBox(height: 16),
                 
-                // Next button - for both Employee and Store codes
-                if (_employeeScannedCodes.isNotEmpty || _storeScannedCodes.isNotEmpty)
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleNextButton();
-                      },
-                      icon: const Icon(Icons.arrow_forward, size: 24),
-                      label: const Text(
-                        'Next',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                      ),
-                    ),
-                  ),
+                // // Next button - for both Employee and Store codes
+                // if (_employeeScannedCodes.isNotEmpty || _storeScannedCodes.isNotEmpty)
+                //   SizedBox(
+                //     width: double.infinity,
+                //     height: 56,
+                //     child: ElevatedButton.icon(
+                //       onPressed: () {
+                //         Navigator.pop(context);
+                //         _handleNextButton();
+                //       },
+                //       icon: const Icon(Icons.arrow_forward, size: 24),
+                //       label: const Text(
+                //         'Next',
+                //         style: TextStyle(
+                //           fontSize: 16,
+                //           fontWeight: FontWeight.w600,
+                //         ),
+                //       ),
+                //       style: ElevatedButton.styleFrom(
+                //         backgroundColor: Colors.green,
+                //         foregroundColor: Colors.white,
+                //         shape: RoundedRectangleBorder(
+                //           borderRadius: BorderRadius.circular(12),
+                //         ),
+                //         elevation: 2,
+                //       ),
+                //     ),
+                //   ),
                 const SizedBox(height: 20),
               ],
             ),
@@ -1020,31 +936,31 @@ class _WebViewScreenState extends State<WebViewScreen> {
             elevation: 4,
             child: const Icon(Icons.qr_code_scanner, size: 28),
           ),
-          if (_employeeScannedCodes.isNotEmpty || _storeScannedCodes.isNotEmpty)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-                constraints: const BoxConstraints(
-                  minWidth: 24,
-                  minHeight: 24,
-                ),
-                child: Text(
-                  '${_employeeScannedCodes.length + _storeScannedCodes.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
+          // if (_employeeScannedCodes.isNotEmpty || _storeScannedCodes.isNotEmpty)
+          //   Positioned(
+          //     right: 0,
+          //     top: 0,
+          //     child: Container(
+          //       padding: const EdgeInsets.all(6),
+          //       decoration: const BoxDecoration(
+          //         color: Colors.red,
+          //         shape: BoxShape.circle,
+          //       ),
+          //       constraints: const BoxConstraints(
+          //         minWidth: 24,
+          //         minHeight: 24,
+          //       ),
+          //       child: Text(
+          //         '${_employeeScannedCodes.length + _storeScannedCodes.length}',
+          //         style: const TextStyle(
+          //           color: Colors.white,
+          //           fontSize: 12,
+          //           fontWeight: FontWeight.bold,
+          //         ),
+          //         textAlign: TextAlign.center,
+          //       ),
+          //     ),
+          //   ),
         ],
       ),
       // Bottom navigation bar with URL info

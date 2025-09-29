@@ -1,4 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:excel/excel.dart' as xls;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class EmployeeIdScreen extends StatefulWidget {
   final List<String> scannedCodes;
@@ -25,41 +29,180 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
     super.dispose();
   }
 
-  void _submitEmployeeId() {
-    if (_formKey.currentState!.validate()) {
+  void _submitEmployeeId() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final file = await _generateExcel(
+        employeeId: _employeeIdController.text.trim(),
+        codes: widget.scannedCodes,
+      );
+
+      if (!mounted) return;
       setState(() {
-        _isLoading = true;
+        _isLoading = false;
       });
 
-      // Simulate API call or processing
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Employee ID ${_employeeIdController.text} assigned to ${widget.scannedCodes.length} items',
-              ),
-              backgroundColor: const Color(0xFF2C5F5F),
-              action: SnackBarAction(
-                label: 'View Details',
-                textColor: Colors.white,
-                onPressed: () {
-                  _showAssignmentDetails();
-                },
-              ),
-            ),
-          );
-
-          // Navigate back to webview
-          Navigator.of(context).pop();
-        }
+      _showExportBottomSheet(file);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to create Excel: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
+  }
+
+  Future<File> _generateExcel({required String employeeId, required List<String> codes}) async {
+    final xls.Excel excel = xls.Excel.createExcel();
+
+    // Use the default first sheet so users see data immediately when opening the file
+    final String defaultSheetName = excel.getDefaultSheet() ?? 'Sheet1';
+    if (defaultSheetName != 'Assignments') {
+      excel.rename(defaultSheetName, 'Assignments');
+    }
+    excel.setDefaultSheet('Assignments');
+    final xls.Sheet sheet = excel['Assignments'];
+
+    // Header row
+    sheet.appendRow(<xls.CellValue?>[
+      xls.TextCellValue('Employee ID'),
+      xls.TextCellValue('Item Scan ID'),
+    ]);
+
+    // Data rows
+    for (final raw in codes) {
+      final code = raw.trim();
+      if (code.isEmpty) continue;
+      sheet.appendRow(<xls.CellValue?>[
+        xls.TextCellValue(employeeId),
+        xls.TextCellValue(code),
+      ]);
+    }
+
+    final bytes = excel.encode();
+    if (bytes == null) {
+      throw Exception('Unable to encode Excel');
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final filename = 'employee_assignment_${employeeId}_$timestamp.xlsx';
+    final file = File('${tempDir.path}/$filename');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  void _showExportBottomSheet(File file) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Text(
+                  'Export Excel',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C5F5F),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  file.path,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await Share.shareXFiles([
+                        XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+                      ], text: 'Employee assignment export');
+                    },
+                    icon: const Icon(Icons.ios_share),
+                    label: const Text('Share'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2C5F5F),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await _saveToDocuments(file);
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Saved to: ${saved.path}'),
+                          backgroundColor: const Color(0xFF2C5F5F),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.download),
+                    label: const Text('Save to device'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2C5F5F),
+                      side: const BorderSide(color: Color(0xFF2C5F5F)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<File> _saveToDocuments(File tempFile) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final target = File('${docs.path}/${tempFile.uri.pathSegments.last}');
+    return tempFile.copy(target.path);
   }
 
   void _showAssignmentDetails() {
@@ -396,6 +539,33 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Start Over Button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    // Go back to the first route (WebViewScreen is at the base of the stack)
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  },
+                  icon: const Icon(Icons.restart_alt),
+                  label: const Text(
+                    'Start Over',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF2C5F5F),
+                    side: const BorderSide(color: Color(0xFF2C5F5F)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
             ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class EmployeeIdScreen extends StatefulWidget {
@@ -68,18 +69,20 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   Future<File> _generateExcel({required String employeeId, required List<String> codes}) async {
     final xls.Excel excel = xls.Excel.createExcel();
 
-    // Use the default first sheet so users see data immediately when opening the file
+    // Dynamically name sheet based on action
     final String defaultSheetName = excel.getDefaultSheet() ?? 'Sheet1';
-    if (defaultSheetName != 'Assignments') {
-      excel.rename(defaultSheetName, 'Assignments');
+    final bool isStore = widget.scannerType == 'Check In to Store';
+    final String sheetName = isStore ? 'CheckIn' : 'Assignments';
+    if (defaultSheetName != sheetName) {
+      excel.rename(defaultSheetName, sheetName);
     }
-    excel.setDefaultSheet('Assignments');
-    final xls.Sheet sheet = excel['Assignments'];
+    excel.setDefaultSheet(sheetName);
+    final xls.Sheet sheet = excel[sheetName];
 
     // Header row
     sheet.appendRow(<xls.CellValue?>[
-      xls.TextCellValue('Employee ID'),
-      xls.TextCellValue('Item Scan ID'),
+      xls.TextCellValue(isStore ? 'Store ID' : 'Employee ID'),
+      xls.TextCellValue('Asset ID'),
     ]);
 
     // Data rows
@@ -99,7 +102,8 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
 
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final filename = 'employee_assignment_${employeeId}_$timestamp.xlsx';
+    final String prefix = isStore ? 'store_checkin' : 'employee_assignment';
+    final filename = '${prefix}_${employeeId}_$timestamp.xlsx';
     final file = File('${tempDir.path}/$filename');
     await file.writeAsBytes(bytes, flush: true);
     return file;
@@ -145,12 +149,12 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  file.path,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
+                // const SizedBox(height: 16),
+                // Text(
+                //   file.path,
+                //   style: const TextStyle(fontSize: 12, color: Colors.grey),
+                //   textAlign: TextAlign.center,
+                // ),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 56,
@@ -235,6 +239,24 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   }
 
   Future<File> _saveToDocuments(File tempFile) async {
+    // Prefer a user-visible picker (Downloads/My Files) on mobile platforms
+    try {
+      final bytes = await tempFile.readAsBytes();
+      final params = SaveFileDialogParams(
+        data: bytes,
+        fileName: tempFile.uri.pathSegments.last,
+        mimeTypesFilter: const [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ],
+      );
+      final savedPath = await FlutterFileDialog.saveFile(params: params);
+      if (savedPath != null) {
+        return File(savedPath);
+      }
+    } catch (_) {
+      // Fall through to app documents directory if picker not available
+    }
+
     final docs = await getApplicationDocumentsDirectory();
     final target = File('${docs.path}/${tempFile.uri.pathSegments.last}');
     return tempFile.copy(target.path);
@@ -400,7 +422,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.scannerType} - Employee Assignment'),
+        title: Text(widget.scannerType == 'Check In to Store' ? 'Check In to Store' : 'Assign to Employee'),
         backgroundColor: const Color(0xFF2C5F5F),
         foregroundColor: Colors.white,
         elevation: 2,
@@ -425,9 +447,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(
-                          Icons.people,
-                          color: Color(0xFF2C5F5F),
+                        Icon(
+                          widget.scannerType == 'Check In to Store' ? Icons.store : Icons.people,
+                          color: const Color(0xFF2C5F5F),
                           size: 28,
                         ),
                         const SizedBox(width: 12),
@@ -435,9 +457,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Assign to Employee',
-                                style: TextStyle(
+                              Text(
+                                widget.scannerType == 'Check In to Store' ? 'Check In to Store' : 'Assign to Employee',
+                                style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF2C5F5F),
@@ -445,7 +467,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${widget.scannedCodes.length} items to assign',
+                                widget.scannerType == 'Check In to Store' ? '${widget.scannedCodes.length} items to check in' : '${widget.scannedCodes.length} items to assign',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey,
@@ -462,9 +484,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
               const SizedBox(height: 24),
               
               // Employee ID Input
-              const Text(
-                'Employee ID',
-                style: TextStyle(
+              Text(
+                widget.scannerType == 'Check In to Store' ? 'Store ID' : 'Employee ID',
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF2C5F5F),
@@ -474,8 +496,8 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
               TextFormField(
                 controller: _employeeIdController,
                 decoration: InputDecoration(
-                  hintText: 'Enter Employee ID',
-                  prefixIcon: const Icon(Icons.badge),
+                  hintText: widget.scannerType == 'Check In to Store' ? 'Enter Store ID' : 'Enter Employee ID',
+                  prefixIcon: Icon(widget.scannerType == 'Check In to Store' ? Icons.store : Icons.badge),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: Colors.grey),
@@ -489,10 +511,10 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter Employee ID';
+                    return widget.scannerType == 'Check In to Store' ? 'Please enter Store ID' : 'Please enter Employee ID';
                   }
                   if (value.length < 3) {
-                    return 'Employee ID must be at least 3 characters';
+                    return widget.scannerType == 'Check In to Store' ? 'Store ID must be at least 3 characters' : 'Employee ID must be at least 3 characters';
                   }
                   return null;
                 },
@@ -502,9 +524,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
               const SizedBox(height: 24),
               
               // Scanned Items List
-              const Text(
-                'Items to Assign',
-                style: TextStyle(
+              Text(
+                widget.scannerType == 'Check In to Store' ? 'Items to Check In' : 'Items to Assign',
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF2C5F5F),
@@ -545,9 +567,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                               fontFamily: 'monospace',
                             ),
                           ),
-                          subtitle: const Text(
-                            'Scanned Item',
-                            style: TextStyle(
+                          subtitle: Text(
+                            widget.scannerType == 'Check In to Store' ? 'Store Item' : 'Scanned Item',
+                            style: const TextStyle(
                               color: Colors.grey,
                             ),
                           ),
@@ -582,9 +604,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text(
-                          'Assign to Employee',
-                          style: TextStyle(
+                      : Text(
+                          widget.scannerType == 'Check In to Store' ? 'Check In to Store' : 'Assign to Employee',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),

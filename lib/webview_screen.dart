@@ -575,11 +575,19 @@ class _WebViewScreenState extends State<WebViewScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // TODO: Implement store check-in functionality
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Store check-in functionality will be implemented'),
-                    backgroundColor: Color(0xFF2C5F5F),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EmployeeIdScreen(
+                      scannedCodes: _storeScannedCodes,
+                      scannerType: 'Check In to Store',
+                      onStartOver: () {
+                        setState(() {
+                          _employeeScannedCodes = [];
+                          _storeScannedCodes = [];
+                        });
+                      },
+                    ),
                   ),
                 );
               },

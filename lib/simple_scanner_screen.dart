@@ -394,8 +394,8 @@ class _SimpleScannerScreenState extends State<SimpleScannerScreen> {
                   ),
                 const SizedBox(height: 20),
                 
-                // Next button for Assign to Employees
-                if (widget.scannerType == 'Assign to Employees' && widget.scannedCodes.isNotEmpty)
+                // Next button for both flows when there are scanned codes
+                if (widget.scannedCodes.isNotEmpty)
                   SizedBox(
                     width: double.infinity,
                     height: 56,
@@ -413,7 +413,7 @@ class _SimpleScannerScreenState extends State<SimpleScannerScreen> {
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
+                        backgroundColor: widget.scannerType == 'Check In to Store' ? Colors.blue : Colors.green,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

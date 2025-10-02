@@ -24,6 +24,7 @@ class EmployeeIdScreen extends StatefulWidget {
 
 class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   final TextEditingController _employeeIdController = TextEditingController();
+  final TextEditingController _startDateController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isSaving = false;
@@ -31,6 +32,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   @override
   void dispose() {
     _employeeIdController.dispose();
+    _startDateController.dispose();
     super.dispose();
   }
 
@@ -66,6 +68,27 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
     }
   }
 
+  Future<void> _pickStartDate() async {
+    final DateTime now = DateTime.now();
+    final DateTime first = DateTime(now.year - 20);
+    final DateTime last = DateTime(now.year + 20);
+
+    final DateTime? selected = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: first,
+      lastDate: last,
+    );
+
+    if (selected != null) {
+      // Format as YYYY-MM-DD without adding a new dependency
+      final String yyyy = selected.year.toString().padLeft(4, '0');
+      final String mm = selected.month.toString().padLeft(2, '0');
+      final String dd = selected.day.toString().padLeft(2, '0');
+      _startDateController.text = '$yyyy-$mm-$dd';
+    }
+  }
+
   Future<File> _generateExcel({required String employeeId, required List<String> codes}) async {
     final xls.Excel excel = xls.Excel.createExcel();
 
@@ -79,20 +102,48 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
     excel.setDefaultSheet(sheetName);
     final xls.Sheet sheet = excel[sheetName];
 
-    // Header row
-    sheet.appendRow(<xls.CellValue?>[
-      xls.TextCellValue(isStore ? 'Store ID' : 'Employee ID'),
-      xls.TextCellValue('Asset ID'),
-    ]);
-
-    // Data rows
-    for (final raw in codes) {
-      final code = raw.trim();
-      if (code.isEmpty) continue;
+    if (isStore) {
+      // Store check-in: keep existing 2-column format
       sheet.appendRow(<xls.CellValue?>[
-        xls.TextCellValue(employeeId),
-        xls.TextCellValue(code),
+        xls.TextCellValue('Store ID'),
+        xls.TextCellValue('Asset ID'),
       ]);
+
+      for (final raw in codes) {
+        final code = raw.trim();
+        if (code.isEmpty) continue;
+        sheet.appendRow(<xls.CellValue?>[
+          xls.TextCellValue(employeeId),
+          xls.TextCellValue(code),
+        ]);
+      }
+    } else {
+      // Assign to employee: 6-column format per spec
+      sheet.appendRow(<xls.CellValue?>[
+        xls.TextCellValue('#team.autonumbered_id'),
+        xls.TextCellValue('em_id'),
+        xls.TextCellValue('eq_id'),
+        xls.TextCellValue('bl_id'),
+        xls.TextCellValue('date_start'),
+        xls.TextCellValue('date_end'),
+      ]);
+
+      final String dateStart = _startDateController.text.trim();
+      const int startingAutoNumber = 10001;
+
+      for (int i = 0; i < codes.length; i++) {
+        final code = codes[i].trim();
+        if (code.isEmpty) continue;
+        final int autoNumber = startingAutoNumber + i;
+        sheet.appendRow(<xls.CellValue?>[
+          xls.TextCellValue(autoNumber.toString()), // 5-digit starting at 10001
+          xls.TextCellValue(employeeId),            // em_id
+          xls.TextCellValue(code),                  // eq_id
+          xls.TextCellValue(''),                    // bl_id empty
+          xls.TextCellValue(dateStart),             // date_start from picker (YYYY-MM-DD)
+          xls.TextCellValue(''),                    // date_end empty
+        ]);
+      }
     }
 
     final bytes = excel.encode();
@@ -520,6 +571,26 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                 },
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => _submitEmployeeId(),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _startDateController,
+                readOnly: true,
+                onTap: _pickStartDate,
+                decoration: InputDecoration(
+                  hintText: 'Enter start date',
+                  prefixIcon: const Icon(Icons.calendar_today),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF2C5F5F), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
               ),
               const SizedBox(height: 24),
               

@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:file_picker/file_picker.dart';
 import 'utils/webview_zoom.dart';
 import 'simple_scanner_screen.dart';
 import 'employee_id_screen.dart';
@@ -126,6 +129,36 @@ class _WebViewScreenState extends State<WebViewScreen> {
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
+
+    // Android: handle <input type="file"> by providing a file picker
+    if (Platform.isAndroid) {
+      final platformController = _controller.platform;
+      if (platformController is AndroidWebViewController) {
+        platformController.setOnShowFileSelector((params) async {
+          try {
+            // Best-effort mapping of requested types to file picker; fallback to any
+            FileType type = FileType.any;
+
+            final result = await FilePicker.platform.pickFiles(
+              allowMultiple: true,
+              type: type,
+              withData: false,
+            );
+
+            if (result == null) return <String>[];
+
+            final uris = result.files
+                .where((f) => f.path != null)
+                .map((f) => Uri.file(f.path!).toString())
+                .toList();
+            return uris;
+          } catch (e) {
+            debugPrint('File chooser error: $e');
+            return <String>[];
+          }
+        });
+      }
+    }
     
     // Add a fallback check after a short delay
     Future.delayed(const Duration(seconds: 2), () {

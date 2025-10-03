@@ -90,14 +90,111 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   }
 
   Future<File> _generateExcel({required String employeeId, required List<String> codes}) async {
-    final xls.Excel excel = xls.Excel.createExcel();
-
-    // Dynamically name sheet based on action
-    final String defaultSheetName = excel.getDefaultSheet() ?? 'Sheet1';
     final bool isStore = widget.scannerType == 'Check In to Store';
     final String sheetName = isStore ? 'CheckIn' : 'Assignments';
-    if (defaultSheetName != sheetName) {
-      excel.rename(defaultSheetName, sheetName);
+    
+    // For store check-ins, always create new file with timestamp
+    if (isStore) {
+      return await _createNewExcelFile(employeeId, codes, isStore, sheetName);
+    }
+    
+    // For employee assignments, check if existing file exists
+    final docsDir = await getApplicationDocumentsDirectory();
+    final String consistentFilename = 'employee_assignments.xlsx';
+    final File existingFile = File('${docsDir.path}/$consistentFilename');
+    
+    xls.Excel excel;
+    bool isNewFile = false;
+    
+    if (await existingFile.exists()) {
+      // Load existing Excel file
+      try {
+        final bytes = await existingFile.readAsBytes();
+        excel = xls.Excel.decodeBytes(bytes);
+        
+        // Check if the sheet exists, if not create it
+        if (!excel.sheets.containsKey(sheetName)) {
+          excel.copy('Sheet1', sheetName);
+        }
+        excel.setDefaultSheet(sheetName);
+      } catch (e) {
+        // If file is corrupted, create a new one
+        excel = xls.Excel.createExcel();
+        if (excel.getDefaultSheet() != sheetName) {
+          excel.rename(excel.getDefaultSheet() ?? 'Sheet1', sheetName);
+        }
+        excel.setDefaultSheet(sheetName);
+        isNewFile = true;
+      }
+    } else {
+      // Create new Excel file
+      excel = xls.Excel.createExcel();
+      if (excel.getDefaultSheet() != sheetName) {
+        excel.rename(excel.getDefaultSheet() ?? 'Sheet1', sheetName);
+      }
+      excel.setDefaultSheet(sheetName);
+      isNewFile = true;
+    }
+    
+    final xls.Sheet sheet = excel[sheetName];
+    
+    // Add header row only for new files
+    if (isNewFile) {
+      sheet.appendRow(<xls.CellValue?>[
+        xls.TextCellValue('#team.autonumbered_id'),
+        xls.TextCellValue('em_id'),
+        xls.TextCellValue('eq_id'),
+        xls.TextCellValue('bl_id'),
+        xls.TextCellValue('date_start'),
+        xls.TextCellValue('date_end'),
+      ]);
+    }
+    
+    // Get the next auto number by counting existing rows
+    final int existingRowCount = sheet.rows.length;
+    const int startingAutoNumber = 10001;
+    final int nextAutoNumber = startingAutoNumber + existingRowCount - (isNewFile ? 1 : 0);
+    
+    final String dateStart = _startDateController.text.trim();
+    
+    // Add new data rows
+    for (int i = 0; i < codes.length; i++) {
+      final code = codes[i].trim();
+      if (code.isEmpty) continue;
+      final int autoNumber = nextAutoNumber + i;
+      sheet.appendRow(<xls.CellValue?>[
+        xls.TextCellValue(autoNumber.toString()), // Auto-incrementing ID
+        xls.TextCellValue(employeeId),            // em_id
+        xls.TextCellValue(code),                  // eq_id
+        xls.TextCellValue(''),                    // bl_id empty
+        xls.TextCellValue(dateStart),             // date_start from picker (YYYY-MM-DD)
+        xls.TextCellValue(''),                    // date_end empty
+      ]);
+    }
+
+    final bytes = excel.encode();
+    if (bytes == null) {
+      throw Exception('Unable to encode Excel');
+    }
+
+    // Save to documents directory with consistent filename
+    await existingFile.writeAsBytes(bytes, flush: true);
+    
+    // Also create a temporary copy for sharing
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final String tempFilename = '${consistentFilename.split('.')[0]}_$timestamp.xlsx';
+    final File tempFile = File('${tempDir.path}/$tempFilename');
+    await tempFile.writeAsBytes(bytes, flush: true);
+    
+    return tempFile;
+  }
+  
+  Future<File> _createNewExcelFile(String employeeId, List<String> codes, bool isStore, String sheetName) async {
+    final xls.Excel excel = xls.Excel.createExcel();
+    
+    if (excel.getDefaultSheet() != sheetName) {
+      excel.rename(excel.getDefaultSheet() ?? 'Sheet1', sheetName);
     }
     excel.setDefaultSheet(sheetName);
     final xls.Sheet sheet = excel[sheetName];
@@ -117,33 +214,6 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
           xls.TextCellValue(code),
         ]);
       }
-    } else {
-      // Assign to employee: 6-column format per spec
-      sheet.appendRow(<xls.CellValue?>[
-        xls.TextCellValue('#team.autonumbered_id'),
-        xls.TextCellValue('em_id'),
-        xls.TextCellValue('eq_id'),
-        xls.TextCellValue('bl_id'),
-        xls.TextCellValue('date_start'),
-        xls.TextCellValue('date_end'),
-      ]);
-
-      final String dateStart = _startDateController.text.trim();
-      const int startingAutoNumber = 10001;
-
-      for (int i = 0; i < codes.length; i++) {
-        final code = codes[i].trim();
-        if (code.isEmpty) continue;
-        final int autoNumber = startingAutoNumber + i;
-        sheet.appendRow(<xls.CellValue?>[
-          xls.TextCellValue(autoNumber.toString()), // 5-digit starting at 10001
-          xls.TextCellValue(employeeId),            // em_id
-          xls.TextCellValue(code),                  // eq_id
-          xls.TextCellValue(''),                    // bl_id empty
-          xls.TextCellValue(dateStart),             // date_start from picker (YYYY-MM-DD)
-          xls.TextCellValue(''),                    // date_end empty
-        ]);
-      }
     }
 
     final bytes = excel.encode();
@@ -153,8 +223,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
 
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final String prefix = isStore ? 'store_checkin' : 'employee_assignment';
-    final filename = '${prefix}_${employeeId}_$timestamp.xlsx';
+    final String filename = 'store_checkin_${employeeId}_$timestamp.xlsx';
     final file = File('${tempDir.path}/$filename');
     await file.writeAsBytes(bytes, flush: true);
     return file;

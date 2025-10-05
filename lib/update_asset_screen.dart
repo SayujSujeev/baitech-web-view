@@ -35,6 +35,17 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
   final TextEditingController _modelNumberController = TextEditingController();
   final TextEditingController _serialNumberController = TextEditingController();
 
+  // Dropdown options for Equipment Condition
+  final List<String> _conditionOptions = const ['New', 'Excellent', 'Good', 'Fair', 'Poor', 'Bad'];
+  String? _selectedCondition;
+
+  @override
+  void initState() {
+    super.initState();
+    final preset = _equipmentConditionController.text.trim();
+    _selectedCondition = preset.isNotEmpty ? preset : null;
+  }
+
   @override
   void dispose() {
     _existingTagNumberController.dispose();
@@ -418,7 +429,7 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
                       const SizedBox(height: 12),
                       _buildTextField(_roomCodeController, 'Room Code', Icons.meeting_room),
                       const SizedBox(height: 12),
-                      _buildTextField(_equipmentConditionController, 'Equipment Condition', Icons.fact_check),
+                      _buildConditionDropdown(),
                       const SizedBox(height: 12),
                       _buildTextField(_manufacturerController, 'Manufacturer', Icons.business),
                       const SizedBox(height: 12),
@@ -482,6 +493,40 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildConditionDropdown() {
+    return DropdownButtonFormField<String>(
+      value: (_selectedCondition != null && _selectedCondition!.isNotEmpty) ? _selectedCondition : null,
+      items: _conditionOptions
+          .map(
+            (e) => DropdownMenuItem<String>(
+              value: e,
+              child: Text(e),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        setState(() {
+          _selectedCondition = value;
+          _equipmentConditionController.text = value ?? '';
+        });
+      },
+      decoration: InputDecoration(
+        hintText: 'Equipment Condition',
+        prefixIcon: const Icon(Icons.fact_check),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.grey),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF2C5F5F), width: 2),
+        ),
+        filled: true,
+        fillColor: Colors.grey[50],
       ),
     );
   }

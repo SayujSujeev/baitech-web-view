@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'employee_id_screen.dart';
+import 'update_asset_screen.dart';
 
 class SimpleScannerScreen extends StatefulWidget {
   final String scannerType;
@@ -167,14 +168,20 @@ class _SimpleScannerScreenState extends State<SimpleScannerScreen> {
   }
 
   void _navigateToEmployeeScreen() {
+    final bool isUpdateAssetFlow = widget.scannerType == 'Update Asset Information';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => EmployeeIdScreen(
-          scannedCodes: widget.scannedCodes,
-          scannerType: widget.scannerType,
-          onStartOver: widget.onStartOver,
-        ),
+        builder: (context) => isUpdateAssetFlow
+            ? UpdateAssetScreen(
+                scannedCodes: widget.scannedCodes,
+                onStartOver: widget.onStartOver,
+              )
+            : EmployeeIdScreen(
+                scannedCodes: widget.scannedCodes,
+                scannerType: widget.scannerType,
+                onStartOver: widget.onStartOver,
+              ),
       ),
     );
   }

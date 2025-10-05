@@ -352,7 +352,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 ),
                 const SizedBox(height: 16),
                 
-                // Check In to Store button (no counts shown)
+                // Update Asset Information button (no counts shown)
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -363,7 +363,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                     },
                     icon: const Icon(Icons.store, size: 24),
                     label: const Text(
-                      'Check In to Store',
+                      'Update Asset Information',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -494,7 +494,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => SimpleScannerScreen(
-          scannerType: 'Check In to Store',
+          scannerType: 'Update Asset Information',
           scannedCodes: _storeScannedCodes,
           onCodeScanned: (String code) {
             setState(() {
@@ -598,8 +598,8 @@ class _WebViewScreenState extends State<WebViewScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Store Check-in'),
-          content: Text('You have ${_storeScannedCodes.length} items to check in to the store.'),
+          title: const Text('Update Asset Information'),
+          content: Text('You have ${_storeScannedCodes.length} item(s) to update.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -613,7 +613,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                   MaterialPageRoute(
                     builder: (context) => EmployeeIdScreen(
                       scannedCodes: _storeScannedCodes,
-                      scannerType: 'Check In to Store',
+                      scannerType: 'Update Asset Information',
                       onStartOver: () {
                         setState(() {
                           _employeeScannedCodes = [];
@@ -628,7 +628,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 backgroundColor: const Color(0xFF2C5F5F),
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Check In'),
+              child: const Text('Update'),
             ),
           ],
         );

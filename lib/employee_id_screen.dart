@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -98,95 +100,157 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
       return await _createNewExcelFile(employeeId, codes, isStore, sheetName);
     }
     
-    // For employee assignments, check if existing file exists
+    // For employee assignments, use the team.xlsx template from assets
+    return await _createFromTemplate(employeeId, codes, sheetName);
+  }
+  
+  Future<File> _createFromTemplate(String employeeId, List<String> codes, String sheetName) async {
+    // Maintain a persistent working copy in app documents so data accumulates
     final docsDir = await getApplicationDocumentsDirectory();
-    final String consistentFilename = 'employee_assignments.xlsx';
-    final File existingFile = File('${docsDir.path}/$consistentFilename');
-    
-    xls.Excel excel;
-    bool isNewFile = false;
-    
-    if (await existingFile.exists()) {
-      // Load existing Excel file
-      try {
-        final bytes = await existingFile.readAsBytes();
-        excel = xls.Excel.decodeBytes(bytes);
-        
-        // Check if the sheet exists, if not create it
-        if (!excel.sheets.containsKey(sheetName)) {
-          excel.copy('Sheet1', sheetName);
-        }
-        excel.setDefaultSheet(sheetName);
-      } catch (e) {
-        // If file is corrupted, create a new one
-        excel = xls.Excel.createExcel();
-        if (excel.getDefaultSheet() != sheetName) {
-          excel.rename(excel.getDefaultSheet() ?? 'Sheet1', sheetName);
-        }
-        excel.setDefaultSheet(sheetName);
-        isNewFile = true;
-      }
+    final String workingFilename = 'team_assignments.xlsx';
+    final File workingFile = File('${docsDir.path}/$workingFilename');
+
+    Uint8List fileBytes;
+    if (await workingFile.exists()) {
+      // Reuse previous file to append new rows
+      fileBytes = await workingFile.readAsBytes();
+      print('Loaded existing working Excel: ${workingFile.path}');
     } else {
-      // Create new Excel file
-      excel = xls.Excel.createExcel();
-      if (excel.getDefaultSheet() != sheetName) {
-        excel.rename(excel.getDefaultSheet() ?? 'Sheet1', sheetName);
+      // First run: seed working file from asset template
+      final String templatePath = 'assets/team.xlsx';
+      final ByteData templateData = await DefaultAssetBundle.of(context).load(templatePath);
+      fileBytes = templateData.buffer.asUint8List();
+      await workingFile.writeAsBytes(fileBytes, flush: true);
+      print('Created working Excel from template at: ${workingFile.path}');
+    }
+
+    // Decode the Excel file
+    xls.Excel excel = xls.Excel.decodeBytes(fileBytes);
+    
+    // Use the default sheet (Sheet1) from the template
+    excel.setDefaultSheet('Sheet1');
+    final xls.Sheet sheet = excel['Sheet1'];
+    
+    // Debug: Print the current sheet structure
+    print('Sheet name: ${excel.getDefaultSheet()}');
+    print('Total rows in template: ${sheet.rows.length}');
+    for (int i = 0; i < sheet.rows.length && i < 5; i++) {
+      print('Row $i: ${sheet.rows[i].map((cell) => cell?.toString() ?? 'null').toList()}');
+    }
+    
+    // Determine the first empty data row by inspecting actual cell values
+    // The template has: Row 1 = title, Row 2 = headers, data starts at Row 3
+    // We'll scan from Row 3 onward until we find a row where the first 3 columns are empty
+    int nextRowIndex = 2; // zero-based index for Row 3
+    int probeRow = 2; // start probing at Row 3 (0-based)
+    while (true) {
+      final bool c0Empty = (sheet
+                  .cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: probeRow))
+                  .value ==
+              null) ||
+          (sheet
+                  .cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: probeRow))
+                  .value
+                  ?.toString()
+                  .trim()
+                  .isEmpty ??
+              true);
+      final bool c1Empty = (sheet
+                  .cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: probeRow))
+                  .value ==
+              null) ||
+          (sheet
+                  .cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: probeRow))
+                  .value
+                  ?.toString()
+                  .trim()
+                  .isEmpty ??
+              true);
+      final bool c2Empty = (sheet
+                  .cell(xls.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: probeRow))
+                  .value ==
+              null) ||
+          (sheet
+                  .cell(xls.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: probeRow))
+                  .value
+                  ?.toString()
+                  .trim()
+                  .isEmpty ??
+              true);
+
+      if (c0Empty && c1Empty && c2Empty) {
+        nextRowIndex = probeRow;
+        break;
       }
-      excel.setDefaultSheet(sheetName);
-      isNewFile = true;
+      probeRow += 1;
+      // Safety guard to avoid infinite loops on strangely formatted files
+      if (probeRow > 10000) {
+        nextRowIndex = 2; // fallback to Row 3
+        break;
+      }
     }
-    
-    final xls.Sheet sheet = excel[sheetName];
-    
-    // Add header row only for new files
-    if (isNewFile) {
-      sheet.appendRow(<xls.CellValue?>[
-        xls.TextCellValue('#team.autonumbered_id'),
-        xls.TextCellValue('em_id'),
-        xls.TextCellValue('eq_id'),
-        xls.TextCellValue('bl_id'),
-        xls.TextCellValue('date_start'),
-        xls.TextCellValue('date_end'),
-      ]);
-    }
-    
-    // Get the next auto number by counting existing rows
-    final int existingRowCount = sheet.rows.length;
-    const int startingAutoNumber = 10001;
-    final int nextAutoNumber = startingAutoNumber + existingRowCount - (isNewFile ? 1 : 0);
     
     final String dateStart = _startDateController.text.trim();
     
-    // Add new data rows
+    // Debug: Print the data we're about to add
+    print('Adding ${codes.length} codes for employee: $employeeId');
+    print('Start date: $dateStart');
+    print('Next row index: $nextRowIndex');
+    print('Current sheet rows: ${sheet.rows.length}');
+    
+    // Write new data directly into cells to preserve existing row formatting
     for (int i = 0; i < codes.length; i++) {
       final code = codes[i].trim();
       if (code.isEmpty) continue;
-      final int autoNumber = nextAutoNumber + i;
-      sheet.appendRow(<xls.CellValue?>[
-        xls.TextCellValue(autoNumber.toString()), // Auto-incrementing ID
-        xls.TextCellValue(employeeId),            // em_id
-        xls.TextCellValue(code),                  // eq_id
-        xls.TextCellValue(''),                    // bl_id empty
-        xls.TextCellValue(dateStart),             // date_start from picker (YYYY-MM-DD)
-        xls.TextCellValue(''),                    // date_end empty
-      ]);
+
+      final int targetRow = nextRowIndex + i; // zero-based row
+      final int autoNumber = 10001 + (targetRow - 2);
+
+      print('Writing row at 1-based row ${targetRow + 1}: AutoNumber=$autoNumber, Employee=$employeeId, Code=$code, Date=$dateStart');
+
+      sheet.updateCell(
+        xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: targetRow),
+        xls.TextCellValue(autoNumber.toString()),
+      );
+      sheet.updateCell(
+        xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: targetRow),
+        xls.TextCellValue(employeeId),
+      );
+      sheet.updateCell(
+        xls.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: targetRow),
+        xls.TextCellValue(code),
+      );
+      sheet.updateCell(
+        xls.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: targetRow),
+        xls.TextCellValue(''),
+      );
+      sheet.updateCell(
+        xls.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: targetRow),
+        xls.TextCellValue(dateStart),
+      );
+      sheet.updateCell(
+        xls.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: targetRow),
+        xls.TextCellValue(''),
+      );
     }
+    
+    print('Total rows in sheet after adding: ${sheet.rows.length}');
 
     final bytes = excel.encode();
     if (bytes == null) {
       throw Exception('Unable to encode Excel');
     }
 
-    // Save to documents directory with consistent filename
-    await existingFile.writeAsBytes(bytes, flush: true);
-    
-    // Also create a temporary copy for sharing
+    // Save back to the working file so future runs append to existing data
+    await workingFile.writeAsBytes(bytes, flush: true);
+
+    // Also create a temporary copy for sharing to avoid exposing app docs path
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final String tempFilename = '${consistentFilename.split('.')[0]}_$timestamp.xlsx';
+    final String tempFilename = 'team_assignments_$timestamp.xlsx';
     final File tempFile = File('${tempDir.path}/$tempFilename');
     await tempFile.writeAsBytes(bytes, flush: true);
-    
+
     return tempFile;
   }
   

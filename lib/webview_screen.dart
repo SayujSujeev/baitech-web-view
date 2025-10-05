@@ -36,7 +36,10 @@ class _WebViewScreenState extends State<WebViewScreen> {
   static const double _zoomStep = 0.1; // 10% steps
   static const double _minZoom = 0.5;
   static const double _maxZoom = 3.0;
-  static const Duration _timeoutDuration = Duration(seconds: 5);
+  static const Duration _timeoutDuration = Duration(seconds: 10);
+  int _consecutiveFailures = 0;
+  static const int _maxAutoRetries = 2;
+  static const Duration _retryDelay = Duration(seconds: 2);
   
   // Barcode scanning lists
   List<String> _employeeScannedCodes = [];
@@ -71,10 +74,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
             _timeoutTimer?.cancel();
             _timeoutTimer = Timer(_timeoutDuration, () {
               if (mounted && _isLoading) {
-                setState(() {
-                  _isLoading = false;
-                  _hasError = true;
-                });
+                _handleLoadError('Timeout');
               }
             });
           },
@@ -91,16 +91,14 @@ class _WebViewScreenState extends State<WebViewScreen> {
             // Check if we're on an error page immediately
             if (url.startsWith('chrome-error://') || url.startsWith('data:text/html')) {
               debugPrint('Detected error page URL: $url');
-              setState(() {
-                _isLoading = false;
-                _hasError = true;
-              });
+              _handleLoadError('Detected error page URL');
               return;
             }
             
             setState(() {
               _isLoading = false;
               _hasError = false;
+              _consecutiveFailures = 0;
             });
             // Apply current zoom after page is fully loaded
             final js = WebViewZoom.buildZoomScript(_zoomScale);
@@ -114,13 +112,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
             debugPrint('Error code: ${error.errorCode}');
             debugPrint('Error type: ${error.errorType}');
             _timeoutTimer?.cancel();
-            if (mounted) {
-              setState(() {
-                _isLoading = false;
-                _hasError = true;
-              });
-              debugPrint('Error state set to true');
-            }
+            _handleLoadError('WebResourceError ${error.errorCode}');
           },
           onNavigationRequest: (NavigationRequest request) {
             // Allow all navigation requests
@@ -169,10 +161,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
           final urlString = url.toString();
           if (urlString.startsWith('chrome-error://') || urlString.startsWith('data:text/html')) {
             debugPrint('Fallback detected error page');
-            setState(() {
-              _isLoading = false;
-              _hasError = true;
-            });
+            _handleLoadError('Fallback error page');
           }
         }).catchError((error) {
           debugPrint('Error getting URL: $error');
@@ -239,14 +228,33 @@ class _WebViewScreenState extends State<WebViewScreen> {
         debugPrint('Error check result: $result');
         if (result == 'true' && mounted) {
           debugPrint('Setting error state to true from JavaScript check');
-          setState(() {
-            _hasError = true;
-          });
+          _handleLoadError('Detected error indicators');
         }
       }).catchError((error) {
         debugPrint('Error checking for error page: $error');
       });
     });
+  }
+
+  void _handleLoadError(String reason) {
+    if (!mounted) return;
+    _consecutiveFailures++;
+    debugPrint('Handle load error ($reason). Attempt $_consecutiveFailures/$_maxAutoRetries');
+    if (_consecutiveFailures <= _maxAutoRetries) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+      Future.delayed(_retryDelay, () {
+        if (!mounted) return;
+        _controller.reload();
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    }
   }
 
   void _applyZoom(double newScale) {

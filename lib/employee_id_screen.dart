@@ -38,6 +38,18 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
     super.dispose();
   }
 
+  Future<void> _resetAssignmentsWorkingFile() async {
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final File workingFile = File('${docsDir.path}/team_assignments.xlsx');
+      if (await workingFile.exists()) {
+        await workingFile.delete();
+      }
+    } catch (_) {
+      // Ignore cleanup errors
+    }
+  }
+
   void _submitEmployeeId() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -409,6 +421,45 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF2C5F5F),
                       side: const BorderSide(color: Color(0xFF2C5F5F)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final saved = await _saveToDocuments(file);
+                      if (!mounted) return;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Saved to: ${saved.path}'),
+                          backgroundColor: const Color(0xFF2C5F5F),
+                        ),
+                      );
+
+                      // Reset working Excel so next entry starts fresh (first row)
+                      await _resetAssignmentsWorkingFile();
+
+                      // Clear date for next entry
+                      if (mounted) {
+                        setState(() {
+                          _startDateController.text = '';
+                        });
+                      }
+
+                      // Start new session
+                      widget.onStartOver();
+                      if (!mounted) return;
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    },
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('Save and Start New'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2C5F5F),
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),

@@ -1,20 +1,21 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:file_picker/file_picker.dart';
 import 'utils/webview_zoom.dart';
 import 'simple_scanner_screen.dart';
 import 'employee_id_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'webview_screen_web.dart' if (dart.library.io) 'webview_screen_web_stub.dart';
 
 /// A web view screen that displays the KFUPM Archibus login page
-class WebViewScreen extends StatefulWidget {
-  /// The URL to load in the web view
+/// On web, this redirects to WebViewScreenWeb which uses iframe
+/// On mobile, this uses webview_flutter package
+class WebViewScreen extends StatelessWidget {
   final String url;
-  
-  /// Optional title for the app bar
   final String? title;
 
   const WebViewScreen({
@@ -24,10 +25,35 @@ class WebViewScreen extends StatefulWidget {
   });
 
   @override
-  State<WebViewScreen> createState() => _WebViewScreenState();
+  Widget build(BuildContext context) {
+    // On web, use the web-specific implementation
+    if (kIsWeb) {
+      return WebViewScreenWeb(url: url, title: title);
+    }
+    // On mobile, use the mobile implementation
+    return _WebViewScreenMobile(url: url, title: title);
+  }
 }
 
-class _WebViewScreenState extends State<WebViewScreen> {
+/// Mobile-specific implementation using webview_flutter
+class _WebViewScreenMobile extends StatefulWidget {
+  /// The URL to load in the web view
+  final String url;
+  
+  /// Optional title for the app bar
+  final String? title;
+
+  const _WebViewScreenMobile({
+    super.key,
+    required this.url,
+    this.title,
+  });
+
+  @override
+  State<_WebViewScreenMobile> createState() => _WebViewScreenMobileState();
+}
+
+class _WebViewScreenMobileState extends State<_WebViewScreenMobile> {
   late final WebViewController _controller;
   bool _isLoading = true;
   bool _hasError = false;
@@ -58,6 +84,13 @@ class _WebViewScreenState extends State<WebViewScreen> {
   }
 
   void _initializeWebView() {
+    // Ensure WebViewPlatform is initialized (should be auto-initialized, but check just in case)
+    if (kIsWeb && WebViewPlatform.instance == null) {
+      // On web, webview_flutter should auto-initialize, but if it hasn't, 
+      // the WebViewController constructor will trigger initialization
+      debugPrint('Warning: WebViewPlatform.instance is null on web');
+    }
+    
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -123,7 +156,8 @@ class _WebViewScreenState extends State<WebViewScreen> {
       ..loadRequest(Uri.parse(widget.url));
 
     // Android: handle <input type="file"> by providing a file picker
-    if (Platform.isAndroid) {
+    // Skip on web as it's handled by the browser
+    if (!kIsWeb) {
       final platformController = _controller.platform;
       if (platformController is AndroidWebViewController) {
         platformController.setOnShowFileSelector((params) async {

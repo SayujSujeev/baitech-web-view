@@ -1,11 +1,13 @@
-import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:excel/excel.dart' as xls;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
+// Conditional import for File class - use stub on web
+import 'dart:io' if (dart.library.html) 'io_stub.dart' show File;
 
 class UpdateAssetScreen extends StatefulWidget {
   final List<String> scannedCodes;
@@ -47,6 +49,7 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
   }
 
   Future<void> _resetAssetWorkingFile() async {
+    if (kIsWeb) return; // File operations not supported on web
     try {
       final docsDir = await getApplicationDocumentsDirectory();
       final File workingFile = File('${docsDir.path}/asset_information_working.xlsx');
@@ -94,6 +97,9 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
   }
 
   Future<File> _generateExcel({required List<String> codes}) async {
+    if (kIsWeb) {
+      throw UnsupportedError('Excel generation not supported on web');
+    }
     // Maintain a persistent working copy in app documents so data accumulates
     final docsDir = await getApplicationDocumentsDirectory();
     final String workingFilename = 'asset_information_working.xlsx';
@@ -101,7 +107,7 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
 
     Uint8List fileBytes;
     if (await workingFile.exists()) {
-      fileBytes = await workingFile.readAsBytes();
+      fileBytes = Uint8List.fromList(await workingFile.readAsBytes());
     } else {
       // Seed from asset template
       const String templatePath = 'assets/asset_information.xlsx';
@@ -370,7 +376,7 @@ class _UpdateAssetScreenState extends State<UpdateAssetScreen> {
 
   Future<File> _saveToDocuments(File tempFile) async {
     try {
-      final bytes = await tempFile.readAsBytes();
+      final bytes = Uint8List.fromList(await tempFile.readAsBytes());
       final params = SaveFileDialogParams(
         data: bytes,
         fileName: tempFile.uri.pathSegments.last,

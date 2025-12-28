@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:excel/excel.dart' as xls;
@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// Conditional import for File class - use stub on web
+import 'dart:io' if (dart.library.html) 'io_stub.dart' show File;
 
 class EmployeeIdScreen extends StatefulWidget {
   final List<String> scannedCodes;
@@ -39,6 +41,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   }
 
   Future<void> _resetAssignmentsWorkingFile() async {
+    if (kIsWeb) return; // File operations not supported on web
     try {
       final docsDir = await getApplicationDocumentsDirectory();
       final File workingFile = File('${docsDir.path}/team_assignments.xlsx');
@@ -104,6 +107,9 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   }
 
   Future<File> _generateExcel({required String employeeId, required List<String> codes}) async {
+    if (kIsWeb) {
+      throw UnsupportedError('Excel generation not supported on web');
+    }
     final bool isStore = widget.scannerType == 'Check In to Store';
     final String sheetName = isStore ? 'CheckIn' : 'Assignments';
     
@@ -125,7 +131,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
     Uint8List fileBytes;
     if (await workingFile.exists()) {
       // Reuse previous file to append new rows
-      fileBytes = await workingFile.readAsBytes();
+      fileBytes = Uint8List.fromList(await workingFile.readAsBytes());
       print('Loaded existing working Excel: ${workingFile.path}');
     } else {
       // First run: seed working file from asset template
@@ -476,7 +482,7 @@ class _EmployeeIdScreenState extends State<EmployeeIdScreen> {
   Future<File> _saveToDocuments(File tempFile) async {
     // Prefer a user-visible picker (Downloads/My Files) on mobile platforms
     try {
-      final bytes = await tempFile.readAsBytes();
+      final bytes = Uint8List.fromList(await tempFile.readAsBytes());
       final params = SaveFileDialogParams(
         data: bytes,
         fileName: tempFile.uri.pathSegments.last,
